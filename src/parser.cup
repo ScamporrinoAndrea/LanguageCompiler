@@ -1,0 +1,105 @@
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+
+init with {:
+    table = new HashMap<String,HashMap<String,Double>>();             
+:};
+
+parser code {:
+
+    public HashMap<String,HashMap<String,Double>> table;           //To initialize
+
+    // Error Report
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+ 
+    // Stack
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+
+:}
+
+/* Symbols Declaration*/
+
+terminal TK1,TK2,TK3,S,SEP,MINUS,CM,EURO,PERC;
+terminal String QSTRING;
+terminal Integer UINT;
+terminal Double REAL;
+
+non terminal prog,header,header1,header2,tk1_list,tk2_list,tk2_3,tk13_list,dresses,list_clothes,dress,shopping,purchase_cmd,Nt0;
+non terminal HashMap prod_list;
+non terminal Object[] purch_list;
+
+/* Grammar */
+
+start with prog;
+
+prog::=header SEP dresses SEP shopping;
+header::= header1 | header2;
+header1::= tk1_list tk2_list;
+tk1_list::= TK1 S TK1 S TK1 S | tk1_list TK1 S TK1 S;
+tk2_list::= tk2_3 | tk2_3 tk2_3 tk2_3 |tk2_3 tk2_3 tk2_3 TK2 S;
+tk2_3::=TK2 S TK2 S TK2 S;
+header2::= TK2 S tk13_list | TK2 S tk13_list TK2 S tk13_list;
+tk13_list::= | tk13_list TK1 S | tk13_list TK3 S;
+
+dresses::= list_clothes;
+list_clothes::= dress dress dress | list_clothes dress dress;
+dress::= QSTRING:name MINUS prod_list:hash S
+    {:
+        parser.table.put(name,hash);
+    :};
+prod_list::= UINT QSTRING:name REAL:val EURO 
+    {:
+        HashMap hash = new HashMap<String, Double>();
+        hash.put(name,val);
+        RESULT=hash;
+    :}
+    | prod_list:prev CM UINT QSTRING:name REAL:val EURO
+    {:
+        HashMap hash = (HashMap) prev;
+        hash.put(name,val);
+        RESULT=hash;
+    :};
+
+shopping::= purchase_cmd | shopping purchase_cmd;
+purchase_cmd::= QSTRING:name UINT:perc PERC MINUS Nt0 purch_list:tot S
+    {:
+        System.out.println("TOTAL: "+String.format(Locale.US,"%.2f", tot[0])+" euro N_PROD: "+tot[1]);
+    :};
+Nt0::={:System.out.println((String)parser.stack(-3));:};
+purch_list::= QSTRING:name UINT:quantity 
+    {:
+        Double cost=parser.table.get((String)parser.stack(-6)).get(name);
+        Integer perc=(Integer) parser.stack(-5);
+        Double tot=(cost*quantity*perc)/100;
+        System.out.println(name+" "+String.format(Locale.US,"%.2f", tot)+" euro");
+        RESULT = new Object[2];
+        RESULT[0]=tot;
+        RESULT[1]=quantity;
+    :}
+    | purch_list:prev CM QSTRING:name UINT:quantity
+    {:
+        Double cost=parser.table.get((String)parser.stack(-8)).get(name);
+        Integer perc=(Integer) parser.stack(-7);
+        Double tot=(cost*quantity*perc)/100;
+        System.out.println(name+" "+String.format(Locale.US,"%.2f", tot)+" euro");
+        RESULT = new Object[2];
+        RESULT[0]=(Double)prev[0]+tot;
+        RESULT[1]=(Integer)prev[1]+quantity;
+    :};
+
